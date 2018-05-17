@@ -1,0 +1,212 @@
+---
+title: "CMSC320 Final Project"
+author: "Andrew Cachiaras"
+date: "May 14, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Minnesota Vikings Defense Final Tutorial
+###Andrew Cachiaras
+
+##Introduction
+This is a tutorial which will teach some introductory data science principles. 
+
+In this tutorial, we will be analyzing NFL statistics. In particular, we will look at the defense of the Minnesota Vikings over time.
+
+These are the libraries that we will be using for this tutorial. Make sure to install them from CRAN and implement them.
+```{r code libraries}
+library(tidyverse)
+library(ggplot2)
+```
+#Getting Started
+We will be using a dataset of NFL statistics from Kaggle. It can be found here: https://www.kaggle.com/kendallgillies/nflstatistics/version/1#. This is a series of CSV (comma-seperated values) files. We won't be using all of the files in the linked download, only two different tables.
+Now you need to load the Quarterback Game Logs and the Runningback Game Logs tables into R using the read_csv function.
+
+```{r code load}
+url <- "https://raw.githubusercontent.com/ajcachiaras/ajcachiaras.github.io/master/Game_Logs_Quarterback.csv"
+url2 <- "https://raw.githubusercontent.com/ajcachiaras/ajcachiaras.github.io/master/Game_Logs_Runningback.csv"
+qb_stats_tab <- read_csv(url)
+rb_stats_tab <- read_csv(url2)
+#print first 6 rows
+qb_stats_tab %>% head()
+rb_stats_tab %>% head()
+```
+
+#Wrangling
+Now that we have loaded our data frames into R, we need to manipulate them in order to get the information that we want out of them. The dataset begins in 1970, so we filter out smaller years to get rid of any potential outliers. We also want to focus on games where at least one pass or rush was attempted, because otherwise our data would be highly skewed due to the large amount of backup quarterbacks that don't play during a game. Additionally, we want to make sure we are only looking at the games where the Quarterbacks played against the Vikings defense.
+
+We also notice that some of the columns in our dataset are labeled as character type, which won't allow us to perform numeric operations on them. We use the transform function to change the columns we will use into numeric data types.
+
+The last thing that we will do in our wrangling of the data is make a new column (using the mutate function) that keeps track of the average yardage per year. Make sure to use the group_by funtion with `Year` as a parameter first, otherwise the new column will be the average of one point.
+
+```{r code wrangle}
+filtered_qb_df <- qb_stats_tab %>%
+  filter(`Year` >= 1950) %>%
+  filter(`Passes Attempted` >= 1) %>%
+  filter(`Opponent` == "MIN") %>%
+  transform(`Passing Yards` = as.numeric(`Passing Yards`)) %>%
+  group_by(`Year`) %>%
+  mutate(avg_pass_yds = mean(`Passing.Yards`))
+filtered_qb_df %>% head()
+
+filtered_rb_df <- rb_stats_tab %>%
+  filter(`Year` >= 1950) %>%
+  filter(`Rushing Attempts` >= 1) %>%
+  filter(`Opponent` == "MIN") %>%
+  transform(`Rushing Yards` = as.numeric(`Rushing Yards`)) %>%
+  group_by(`Year`) %>%
+  mutate(avg_rush_yds = mean(`Rushing.Yards`))
+filtered_rb_df %>% head()
+```
+
+#Visualizing
+Let's look at how the Vikings' pass defense has affected their win  rate. In order to do this we want to plot their Passing yards, with a point for each game, with another variable to indicate the outcome.
+```{r code plot_qb}
+filtered_qb_df %>%
+  ggplot(aes(x=`Year`, y=`Passing.Yards`)) +
+  geom_point(mapping=aes(color=`Outcome`)) +
+  labs(title = "Vikings Passing Yards Allowed")
+```
+
+It is hard to determine any real trend from this data. It would seem that when the Vikings allow less passing yardage, they win. However, there is no obvious pattern to back this up.
+
+
+Lets do the same thing for rushing yardage:
+```{r code plot_rb}
+filtered_rb_df %>%
+  ggplot(aes(x=`Year`, y=`Rushing.Yards`)) +
+  geom_point(mapping=aes(color=`Outcome`)) +
+  labs(title = "Vikings Rushing Yards Allowed")
+```
+
+A similarly surprising analysis to the passing yards plot could be made for the rushing yards plot.
+
+So we know that there probably isn't a strong correlation between winning (or losing) and yards allowed for the Vikings defense due to the lack of observable patterns in the previous two plots.
+
+But how do they compare to the rest of the league?
+
+#Analyzing
+Lets look at passing stats specifically first. Lets wrangle our original data in a different way, with mostly the same criteria, but this looking at all of the possible opponents to get data from the whole league.
+Then we will take that league passing data and use the ggplot library to look at the average passing yardage per year for the entire league.
+```{r code plot_league_pass_yds}
+league_qb_stats_tab <- qb_stats_tab %>%
+  filter(`Year` >= 1950) %>%
+  filter(`Passes Attempted` >= 1) %>%
+  transform(`Passing Yards` = as.numeric(`Passing Yards`)) %>%
+  group_by(`Year`) %>%
+  mutate(avg_pass_yds = mean(`Passing.Yards`))
+
+league_qb_stats_tab %>%
+  ggplot(aes(x=`Year`, y=`avg_pass_yds`)) +
+  geom_point() +
+  geom_smooth(method=lm) +
+  labs(title="League Average Passing Yardage by Year") + 
+  ylim(75,250)
+```
+
+We then want to plot the average passing yards allowed by the Vikings' defense in order to make a comparison:
+```{r code plot_viking_pass_yds}
+filtered_qb_df %>%
+  ggplot(aes(x=`Year`, y=`avg_pass_yds`, se=FALSE)) +
+  geom_point() +
+  geom_smooth(method=lm) +
+  labs(title="Viking Opponents Average Passing Yardage by Year") +
+  ylim(75,250)
+
+```
+
+The slopes of the regression lines drawn by geom_smooth appear to relatively similar to each other. (only 0.2 different) This means that the trend of the Vikings' defense isn't very different than that of the the whole league, in fact, it is slightly worse.
+
+Let's do the same thing for average rushing yardage of the league:
+```{r code plot_league_rush_yds}
+league_rb_stats_tab <- rb_stats_tab %>%
+  filter(`Year` >= 1950) %>%
+  filter(`Rushing Attempts` >= 1) %>%
+  transform(`Rushing Yards` = as.numeric(`Rushing Yards`)) %>%
+  group_by(`Year`) %>%
+  mutate(avg_rush_yds = mean(`Rushing.Yards`))
+  
+league_rb_stats_tab %>%
+  ggplot(aes(x=`Year`, y=`avg_rush_yds`)) +
+  geom_point() +
+  geom_smooth(method=lm) +
+  labs(title="League Average Rushing Yardage by Year") +
+  ylim(20,55)
+```
+
+And repeat in a similar fashion to get average Viking rush yardage allowed:
+```{r code plot_rush_yds}
+filtered_rb_df %>%
+  ggplot(aes(x=`Year`, y=`avg_rush_yds`)) +
+  geom_point() +
+  geom_smooth(method=lm) +
+  labs(title="Viking Opponents Average Rushing Yardage by Year") +
+  ylim(20, 55)
+```
+
+Finally, we see a difference between the league averages and Minnesota's trend. The league has gradually increased in its average rush yardage allowed over the last 40 years, but the Vikings actually have a downward trend, albeit mild.
+
+So what does this mean?
+
+
+#Hypothesis Testing
+The hypothesis is that the proposed regressions are models that fit the data well. (Also called Lack-of-fit sum of squares) We want to see if our linear analysis of this data is valid. (And if it could potentially be used to predict future behavior)
+
+We actually already did all of the analysis that we needed while finding the slopes
+
+In order to find out definitively the quality of the fits, we need numerical data about the models that we already have.
+These can be obtained relatively painlessly using the broom function from the tidy package.
+###League Average Pass Yards
+```{r code slope_league_pass}
+league_passyds_fit <- lm(avg_pass_yds~Year, data=league_qb_stats_tab)
+broom::tidy(league_passyds_fit)
+```
+
+###Viking Average Pass Yards
+```{r code slope_viking_pass}
+viking_passyds_fit <- lm(avg_pass_yds~Year, data=filtered_qb_df)
+broom::tidy(viking_passyds_fit)
+```
+
+###League Average Rush Yards
+```{r code slope_league_rush}
+league_rushyds_fit <- lm(avg_rush_yds~Year, data=league_rb_stats_tab)
+broom::tidy(league_rushyds_fit)
+```
+
+###Viking Average Rush Yards
+```{r code slope_viking_rush}
+viking_rushyds_fit <- lm(avg_rush_yds~Year, data=filtered_rb_df)
+broom::tidy(viking_rushyds_fit)
+```
+
+From these tables, you can pull the Y-intercept and Slope of the linear model from the estimate column of the (Intercept) and Year terms, respectively. (Keep in mind that the Y-intercept doesn't mean much functionally, because the data only goes back to 1970)
+
+More important for our analysis are the p-values in the last column. These indicate a statistical significance that could not occur due to randomness. If a p-value is lower than the confidence interval of p = 0.05, than it is safe to reject the Null Hypothesis. In this case, the Null Hypothesis is that there is no difference between a random distribution and our data. 
+
+Because all 4 of the p-values are much lower than the given confidence interval, we can say that the linear models we found do accurately reflect a general trend in the data we have.
+
+#Final Analysis
+We can see from our plots that the Vikings actually have a pass defense that trends to be slightly worse than the league average, but a run defense that is much better than the league average, and continues to improve, despite the trend in the league to allow more yards as time goes on.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
